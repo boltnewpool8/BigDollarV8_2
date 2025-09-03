@@ -18,7 +18,7 @@ export const NameScrolling: React.FC<NameScrollingProps> = ({
   winnerCount,
   prizeCategory
 }) => {
-  const [phase, setPhase] = useState<'countdown' | 'revealing' | 'complete'>('countdown');
+  const [phase, setPhase] = useState<'countdown' | 'revealing' | 'waiting' | 'complete'>('countdown');
   const [countdown, setCountdown] = useState(15);
   const [currentWinnerIndex, setCurrentWinnerIndex] = useState(0);
   const [selectedWinners, setSelectedWinners] = useState<Guide[]>([]);
@@ -67,41 +67,50 @@ export const NameScrolling: React.FC<NameScrollingProps> = ({
     setPhase('countdown');
     setCountdown(getCountdownDuration(prizeCategory));
 
-    const processNextWinner = (winnerIndex: number) => {
-      if (winnerIndex >= winners.length) {
-        setPhase('complete');
-        setTimeout(() => {
-          onComplete(winners);
-        }, 2000);
-        return;
-      }
-
-      setCurrentWinnerIndex(winnerIndex);
-      setPhase('countdown');
-      const duration = getCountdownDuration(prizeCategory);
-      setCountdown(duration);
-
-      // Countdown timer
-      let timeLeft = duration;
-      const countdownInterval = setInterval(() => {
-        timeLeft--;
-        setCountdown(timeLeft);
-        
-        if (timeLeft <= 0) {
-          clearInterval(countdownInterval);
-          setPhase('revealing');
-          setCurrentWinner(winners[winnerIndex]);
-          
-          // Show winner for 4 seconds, then move to next
-          setTimeout(() => {
-            processNextWinner(winnerIndex + 1);
-          }, 4000);
-        }
-      }, 1000);
-    };
-
-    processNextWinner(0);
+    // Start with first winner countdown
+    startCountdownForWinner(0);
   }, [isScrolling, guides, onComplete, winnerCount, prizeCategory]);
+
+  const startCountdownForWinner = (winnerIndex: number) => {
+    setCurrentWinnerIndex(winnerIndex);
+    setPhase('countdown');
+    const duration = getCountdownDuration(prizeCategory);
+    setCountdown(duration);
+
+    // Countdown timer
+    let timeLeft = duration;
+    const countdownInterval = setInterval(() => {
+      timeLeft--;
+      setCountdown(timeLeft);
+      
+      if (timeLeft <= 0) {
+        clearInterval(countdownInterval);
+        setPhase('revealing');
+        setCurrentWinner(selectedWinners[winnerIndex]);
+        
+        // Show winner for 3 seconds, then wait for user input (or complete if last winner)
+        setTimeout(() => {
+          if (winnerIndex === selectedWinners.length - 1) {
+            // Last winner - complete automatically
+            setPhase('complete');
+            setTimeout(() => {
+              onComplete(selectedWinners);
+            }, 2000);
+          } else {
+            // More winners - wait for user to click Next
+            setPhase('waiting');
+          }
+        }, 3000);
+      }
+    }, 1000);
+  };
+
+  const handleNextWinner = () => {
+    const nextIndex = currentWinnerIndex + 1;
+    if (nextIndex < selectedWinners.length) {
+      startCountdownForWinner(nextIndex);
+    }
+  };
 
   if (!isScrolling) return null;
 
@@ -243,6 +252,85 @@ export const NameScrolling: React.FC<NameScrollingProps> = ({
           </div>
         )}
 
+        {phase === 'waiting' && currentWinner && (
+          <div>
+            <motion.h2
+              animate={{ 
+                scale: [1, 1.05, 1],
+                textShadow: [
+                  "0 0 20px rgba(255,255,255,0.5)",
+                  "0 0 40px rgba(255,255,255,0.8)",
+                  "0 0 20px rgba(255,255,255,0.5)"
+                ]
+              }}
+              transition={{ duration: 1, repeat: Infinity }}
+              className="text-4xl md:text-5xl font-bold text-white mb-8"
+            >
+              {prizeCategory ? `${prizeCategory.icon} ${prizeCategory.name} WINNER #${currentWinnerIndex + 1} ${prizeCategory.icon}` : `🏆 WINNER #${currentWinnerIndex + 1} 🏆`}
+            </motion.h2>
+
+            <motion.div
+              initial={{ 
+                scale: 0,
+                opacity: 0,
+                rotateY: 180
+              }}
+              animate={{ 
+                scale: 1,
+                opacity: 1,
+                rotateY: 0
+              }}
+              transition={{ 
+                duration: 0.8,
+                type: "spring",
+                stiffness: 100,
+                damping: 15
+              }}
+              className="bg-white/20 backdrop-blur-xl rounded-3xl p-8 md:p-12 border border-white/30 shadow-2xl min-h-[400px] flex flex-col items-center justify-center"
+            >
+              <div className="text-center mb-8">
+                <div className="bg-white/30 backdrop-blur-sm rounded-2xl p-8 border border-white/40 shadow-lg">
+                  <div className="text-4xl md:text-5xl font-bold text-white mb-4">
+                    {currentWinner.name}
+                  </div>
+                  <div className="text-2xl text-white font-semibold mb-3">
+                    {currentWinner.department}
+                  </div>
+                  <div className="text-xl text-white font-medium mb-4">
+                    Supervisor: {currentWinner.supervisor}
+                  </div>
+                  <div className="flex justify-center space-x-6 text-sm">
+                    <div className="bg-yellow-500/80 rounded-lg px-4 py-3">
+                      <span className="text-white font-bold">
+                        {currentWinner.totalTickets} tickets
+                      </span>
+                    </div>
+                    <div className="bg-green-500/80 rounded-lg px-4 py-3">
+                      <span className="text-white font-bold">
+                        NPS: {currentWinner.nps}
+                      </span>
+                    </div>
+                    <div className="bg-blue-500/80 rounded-lg px-4 py-3">
+                      <span className="text-white font-bold">
+                        NRPC: {currentWinner.nrpc}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleNextWinner}
+                className="px-8 py-4 bg-gradient-to-r from-green-500 to-blue-500 text-white rounded-full font-bold text-lg hover:from-green-600 hover:to-blue-600 focus:ring-4 focus:ring-blue-400/50 transition-all duration-300 shadow-lg"
+              >
+                🎯 Next Winner ({currentWinnerIndex + 2} of {selectedWinners.length})
+              </motion.button>
+            </motion.div>
+          </div>
+        )}
+
         {phase === 'complete' && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
@@ -270,10 +358,8 @@ export const NameScrolling: React.FC<NameScrollingProps> = ({
                 <div
                   key={index}
                   className={`w-3 h-3 rounded-full transition-all duration-500 ${
-                    index < currentWinnerIndex 
+                    index <= currentWinnerIndex 
                       ? 'bg-green-400 shadow-lg' 
-                      : index === currentWinnerIndex 
-                        ? 'bg-yellow-400 shadow-lg animate-pulse' 
                         : 'bg-white/30'
                   }`}
                 />
@@ -292,6 +378,7 @@ export const NameScrolling: React.FC<NameScrollingProps> = ({
         >
           {phase === 'countdown' && '✨ The magic is building... ✨'}
           {phase === 'revealing' && '🎉 Congratulations! 🎉'}
+          {phase === 'waiting' && '🎯 Ready for the next winner? 🎯'}
           {phase === 'complete' && '🎉 All winners selected! 🎉'}
         </motion.div>
       </div>
